@@ -42,6 +42,21 @@
         return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
       }
 
+      function getSafeAdminUrls(rawAdminUrl) {
+        try {
+          const parsed = new URL(rawAdminUrl, location.origin);
+          const slug = parsed.pathname.split("/").filter(Boolean).pop();
+          const token = parsed.searchParams.get("token") || "";
+          if (!slug || !token) return null;
+          return {
+            adminPageUrl: `${location.origin}/admin/${encodeURIComponent(slug)}?token=${encodeURIComponent(token)}`,
+            adminApiUrl: `${location.origin}/api/admin/polls/${encodeURIComponent(slug)}?token=${encodeURIComponent(token)}`
+          };
+        } catch {
+          return null;
+        }
+      }
+
       async function loadAdminDetails(slug, adminUrl, containerId) {
         const container = document.getElementById(containerId);
         if (adminDetailsCache.has(slug)) {
@@ -50,8 +65,12 @@
         }
         container.innerHTML = '<div class="muted">Loading vote details...</div>';
         try {
-          const apiUrl = adminUrl.replace("/admin/", "/api/admin/polls/");
-          const response = await fetch(apiUrl);
+          const safeUrls = getSafeAdminUrls(adminUrl);
+          if (!safeUrls) {
+            container.innerHTML = '<div class="status err">Invalid admin link for this poll.</div>';
+            return;
+          }
+          const response = await fetch(safeUrls.adminApiUrl);
           const data = await response.json();
           if (!response.ok) {
             container.innerHTML = `<div class="status err">${htmlEscape(data.error || "Could not load admin details.")}</div>`;
@@ -97,21 +116,25 @@
         myPollsEl.innerHTML = data.myPolls.length
           ? data.myPolls
               .map(
-                (poll, index) =>
-                  `<div class="card">
+                (poll, index) => {
+                  const safeUrls = getSafeAdminUrls(poll.adminUrl);
+                  const adminPageUrl = safeUrls ? safeUrls.adminPageUrl : poll.adminUrl;
+                  return `
+                  <div class="card">
                     <div><strong>${htmlEscape(poll.question)}</strong></div>
                     <div class="meta">Total votes: ${poll.totalVotes}</div>
                     <div><a href="/poll/${encodeURIComponent(poll.slug)}" target="_blank">Open poll</a></div>
-                    <div><a href="${htmlEscape(poll.adminUrl)}" target="_blank">Open admin page</a></div>
+                    <div><a href="${htmlEscape(adminPageUrl)}" target="_blank">Open admin page</a></div>
                     <div style="margin-top:8px">
                       <button class="secondary" type="button" data-admin-slug="${htmlEscape(
                         poll.slug
-                      )}" data-admin-url="${htmlEscape(poll.adminUrl)}" data-admin-target="admin-${index}">
+                      )}" data-admin-url="${htmlEscape(adminPageUrl)}" data-admin-target="admin-${index}">
                         Show vote details
                       </button>
                     </div>
                     <div id="admin-${index}" style="margin-top:8px"></div>
-                  </div>`
+                  </div>`;
+                }
               )
               .join("")
           : "No polls yet.";
