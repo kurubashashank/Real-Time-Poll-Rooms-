@@ -213,7 +213,7 @@ async function setupDatabase() {
 
 const dbReady = setupDatabase();
 
-app.use(async (_req, res, next) => {
+app.use("/api", async (_req, res, next) => {
   try {
     await dbReady;
     next();
