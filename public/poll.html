@@ -29,7 +29,6 @@
       <div id="status"></div>
     </main>
 
-    <script src="/socket.io/socket.io.js"></script>
     <script>
       const slug = location.pathname.split("/").filter(Boolean).pop();
       const questionEl = document.getElementById("question");
@@ -40,6 +39,7 @@
       const resultsEl = document.getElementById("results");
       const totalVotesEl = document.getElementById("totalVotes");
       const statusEl = document.getElementById("status");
+      let refreshTimerId = null;
 
       let currentPoll = null;
 
@@ -115,6 +115,21 @@
         renderPoll(data);
       }
 
+      async function refreshResultsOnly() {
+        if (!currentPoll) return;
+        try {
+          const response = await fetch(`/api/polls/${encodeURIComponent(slug)}`);
+          const data = await response.json();
+          if (!response.ok) return;
+          currentPoll.options = data.options;
+          currentPoll.totalVotes = data.totalVotes;
+          renderResults(data.options, data.totalVotes);
+          totalVotesEl.textContent = `Total votes: ${data.totalVotes}`;
+        } catch (error) {
+          // ignore transient refresh errors
+        }
+      }
+
       voteBtn.addEventListener("click", async (event) => {
         event.preventDefault();
         clearStatus();
@@ -148,8 +163,12 @@
 
         currentPoll.hasVoted = true;
         currentPoll.userOptionId = Number(selected.value);
+        currentPoll.options = data.options;
+        currentPoll.totalVotes = data.totalVotes;
         voteBtn.disabled = true;
         Array.from(voteForm.querySelectorAll("input[name='optionId']")).forEach((i) => (i.disabled = true));
+        renderResults(data.options, data.totalVotes);
+        totalVotesEl.textContent = `Total votes: ${data.totalVotes}`;
         setStatus("Vote submitted successfully.", "ok");
       });
 
@@ -161,16 +180,6 @@
             voteBtn.click();
           }
         }
-      });
-
-      const socket = io();
-      socket.emit("poll:join", slug);
-      socket.on("poll:update", (payload) => {
-        if (!currentPoll || payload.slug !== slug) return;
-        currentPoll.options = payload.options;
-        currentPoll.totalVotes = payload.totalVotes;
-        renderResults(payload.options, payload.totalVotes);
-        totalVotesEl.textContent = `Total votes: ${payload.totalVotes}`;
       });
 
       if (!slug) {
@@ -185,6 +194,16 @@
         creatorEl.textContent = "";
         voteBtn.disabled = true;
         setStatus(error.message || "Could not load poll.", "err");
+        });
+        refreshTimerId = setInterval(refreshResultsOnly, 2500);
+        document.addEventListener("visibilitychange", () => {
+          if (document.hidden && refreshTimerId) {
+            clearInterval(refreshTimerId);
+            refreshTimerId = null;
+          } else if (!document.hidden && !refreshTimerId) {
+            refreshResultsOnly();
+            refreshTimerId = setInterval(refreshResultsOnly, 2500);
+          }
         });
       }
     </script>
