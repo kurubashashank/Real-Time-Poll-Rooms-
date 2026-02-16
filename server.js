@@ -54,6 +54,15 @@ const io = IS_VERCEL
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
+app.set("trust proxy", 1);
+
+function getPublicBaseUrl(req) {
+  const forwardedProto = (req.headers["x-forwarded-proto"] || "").toString().split(",")[0].trim();
+  const protocol = forwardedProto || req.protocol || "https";
+  const forwardedHost = (req.headers["x-forwarded-host"] || "").toString().split(",")[0].trim();
+  const host = forwardedHost || req.get("host");
+  return `${protocol}://${host}`;
+}
 
 app.use((_req, res, next) => {
   if (dbFatalError) {
@@ -474,7 +483,7 @@ app.get("/api/dashboard", requireAuth, async (req, res) => {
       myPolls: myPolls.map((p) => ({
         ...p,
         totalVotes: Number(p.total_votes),
-        adminUrl: `${req.protocol}://${req.get("host")}/admin/${p.slug}?token=${encodeURIComponent(p.admin_token)}`
+        adminUrl: `${getPublicBaseUrl(req)}/admin/${p.slug}?token=${encodeURIComponent(p.admin_token)}`
       })),
       myVotes,
       allPolls: allPolls.map((p) => ({ ...p, totalVotes: Number(p.total_votes) }))
@@ -516,8 +525,9 @@ app.post("/api/polls", requireAuth, async (req, res) => {
       await run("INSERT INTO options (poll_id, text) VALUES (?, ?)", [pollId, option]);
     }
 
-    const shareUrl = `${req.protocol}://${req.get("host")}/poll/${slug}`;
-    const adminUrl = `${req.protocol}://${req.get("host")}/admin/${slug}?token=${encodeURIComponent(adminToken)}`;
+    const baseUrl = getPublicBaseUrl(req);
+    const shareUrl = `${baseUrl}/poll/${slug}`;
+    const adminUrl = `${baseUrl}/admin/${slug}?token=${encodeURIComponent(adminToken)}`;
     return res.status(201).json({ slug, shareUrl, adminUrl });
   } catch (error) {
     return res.status(500).json({ error: "Could not create poll." });
