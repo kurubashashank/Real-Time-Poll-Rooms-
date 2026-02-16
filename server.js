@@ -9,13 +9,23 @@ const http = require("http");
 
 const PORT = process.env.PORT || 3000;
 const IS_VERCEL = Boolean(process.env.VERCEL);
-const DB_PATH = IS_VERCEL ? "/tmp/applyo.db" : path.join(__dirname, "data", "applyo.db");
+const DB_PATH = IS_VERCEL ? ":memory:" : path.join(__dirname, "data", "applyo.db");
 const RATE_LIMIT_DISABLED = process.env.DISABLE_RATE_LIMIT === "1";
 
 const slugGenerator = customAlphabet("abcdefghjkmnpqrstuvwxyz23456789", 8);
 const adminTokenGenerator = customAlphabet("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 24);
 
-const db = new sqlite3.Database(DB_PATH);
+let dbFatalError = null;
+const db = new sqlite3.Database(DB_PATH, (error) => {
+  if (error) {
+    dbFatalError = error;
+    console.error("SQLite open error:", error);
+  }
+});
+db.on("error", (error) => {
+  dbFatalError = error;
+  console.error("SQLite runtime error:", error);
+});
 const app = express();
 const server = IS_VERCEL ? null : http.createServer(app);
 const io = IS_VERCEL
@@ -25,6 +35,13 @@ const io = IS_VERCEL
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
+
+app.use((_req, res, next) => {
+  if (dbFatalError) {
+    return res.status(500).json({ error: "Database is not available in this environment." });
+  }
+  return next();
+});
 
 function run(sql, params = []) {
   return new Promise((resolve, reject) => {
