@@ -2,7 +2,6 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const crypto = require("crypto");
-const { customAlphabet } = require("nanoid");
 const sqlite3 = require("sqlite3").verbose();
 const { Server } = require("socket.io");
 const http = require("http");
@@ -12,8 +11,24 @@ const IS_VERCEL = Boolean(process.env.VERCEL);
 const DB_PATH = IS_VERCEL ? ":memory:" : path.join(__dirname, "data", "applyo.db");
 const RATE_LIMIT_DISABLED = process.env.DISABLE_RATE_LIMIT === "1";
 
-const slugGenerator = customAlphabet("abcdefghjkmnpqrstuvwxyz23456789", 8);
-const adminTokenGenerator = customAlphabet("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 24);
+const SLUG_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+const ADMIN_TOKEN_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+function generateFromAlphabet(length, alphabet) {
+  let value = "";
+  for (let i = 0; i < length; i += 1) {
+    value += alphabet[crypto.randomInt(0, alphabet.length)];
+  }
+  return value;
+}
+
+function slugGenerator() {
+  return generateFromAlphabet(8, SLUG_ALPHABET);
+}
+
+function adminTokenGenerator() {
+  return generateFromAlphabet(24, ADMIN_TOKEN_ALPHABET);
+}
 
 let dbFatalError = null;
 const db = new sqlite3.Database(DB_PATH, (error) => {
