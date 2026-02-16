@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "functions": {
+    "server.js": {
+      "runtime": "nodejs20.x",
+      "includeFiles": "node_modules/sqlite3/build/Release/**"
+    }
+  },
   "builds": [
     {
       "src": "server.js",

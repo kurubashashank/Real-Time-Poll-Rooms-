@@ -179,6 +179,18 @@ async function setupDatabase() {
   await run("CREATE INDEX IF NOT EXISTS idx_rate_limits_lookup ON rate_limits(ip, action, poll_id, created_at);");
 }
 
+const dbReady = setupDatabase();
+
+app.use(async (_req, res, next) => {
+  try {
+    await dbReady;
+    next();
+  } catch (error) {
+    console.error("Database setup failed:", error);
+    res.status(500).json({ error: "Database initialization failed." });
+  }
+});
+
 async function enforceRateLimit(ip, action, pollId, windowMs, maxHits) {
   if (RATE_LIMIT_DISABLED) return true;
 
@@ -653,18 +665,6 @@ if (!IS_VERCEL) {
     });
   });
 }
-
-const dbReady = setupDatabase();
-
-app.use(async (_req, res, next) => {
-  try {
-    await dbReady;
-    next();
-  } catch (error) {
-    console.error("Database setup failed:", error);
-    res.status(500).json({ error: "Database initialization failed." });
-  }
-});
 
 if (!IS_VERCEL) {
   dbReady
