@@ -8,7 +8,8 @@ const { Server } = require("socket.io");
 const http = require("http");
 
 const PORT = process.env.PORT || 3000;
-const DB_PATH = path.join(__dirname, "data", "applyo.db");
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const DB_PATH = IS_VERCEL ? "/tmp/applyo.db" : path.join(__dirname, "data", "applyo.db");
 const RATE_LIMIT_DISABLED = process.env.DISABLE_RATE_LIMIT === "1";
 
 const slugGenerator = customAlphabet("abcdefghjkmnpqrstuvwxyz23456789", 8);
@@ -16,8 +17,10 @@ const adminTokenGenerator = customAlphabet("abcdefghijklmnopqrstuvwxyzABCDEFGHIJ
 
 const db = new sqlite3.Database(DB_PATH);
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const server = IS_VERCEL ? null : http.createServer(app);
+const io = IS_VERCEL
+  ? { to: () => ({ emit: () => {} }), on: () => {} }
+  : new Server(server);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -642,20 +645,38 @@ app.get("/browse-polls", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "browse-polls.html"));
 });
 
-io.on("connection", (socket) => {
-  socket.on("poll:join", (slug) => {
-    if (typeof slug !== "string" || slug.length > 64) return;
-    socket.join(`poll:${slug}`);
+if (!IS_VERCEL) {
+  io.on("connection", (socket) => {
+    socket.on("poll:join", (slug) => {
+      if (typeof slug !== "string" || slug.length > 64) return;
+      socket.join(`poll:${slug}`);
+    });
   });
+}
+
+const dbReady = setupDatabase();
+
+app.use(async (_req, res, next) => {
+  try {
+    await dbReady;
+    next();
+  } catch (error) {
+    console.error("Database setup failed:", error);
+    res.status(500).json({ error: "Database initialization failed." });
+  }
 });
 
-setupDatabase()
-  .then(() => {
-    server.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+if (!IS_VERCEL) {
+  dbReady
+    .then(() => {
+      server.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error("Database setup failed:", error);
+      process.exit(1);
     });
-  })
-  .catch((error) => {
-    console.error("Database setup failed:", error);
-    process.exit(1);
-  });
+}
+
+module.exports = app;
