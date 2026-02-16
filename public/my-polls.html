@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Polls | Poll Rooms</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="hero"><span class="badge">Admin Console</span><h1 style="margin-top:8px">My polls</h1><p>Open your polls, monitor votes, and review who voted.</p></section>
+      <nav class="top-nav">
+        <a class="secondary" href="/">Home</a>
+        <a class="secondary" href="/create-poll">Create Poll</a>
+        <a class="secondary" href="/my-votes">My Votes</a>
+        <a class="secondary" href="/browse-polls">Browse Polls</a>
+      </nav>
+
+      <div id="myPolls" class="list">Loading...</div>
+      <div id="status"></div>
+    </main>
+
+    <script>
+      const myPollsEl = document.getElementById("myPolls");
+      const statusEl = document.getElementById("status");
+      const adminDetailsCache = new Map();
+
+      function setStatus(message, type) {
+        statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      function htmlEscape(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      function formatDate(ts) {
+        const d = new Date(Number(ts));
+        return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+      }
+
+      async function loadAdminDetails(slug, adminUrl, containerId) {
+        const container = document.getElementById(containerId);
+        if (adminDetailsCache.has(slug)) {
+          container.innerHTML = adminDetailsCache.get(slug);
+          return;
+        }
+        container.innerHTML = '<div class="muted">Loading vote details...</div>';
+        try {
+          const apiUrl = adminUrl.replace("/admin/", "/api/admin/polls/");
+          const response = await fetch(apiUrl);
+          const data = await response.json();
+          if (!response.ok) {
+            container.innerHTML = `<div class="status err">${htmlEscape(data.error || "Could not load admin details.")}</div>`;
+            return;
+          }
+          if (!data.votes.length) {
+            const emptyHtml = '<div class="muted">No votes yet for this poll.</div>';
+            adminDetailsCache.set(slug, emptyHtml);
+            container.innerHTML = emptyHtml;
+            return;
+          }
+          const detailsHtml = data.votes
+            .map(
+              (vote) => `
+                <div class="card" style="margin-top:8px">
+                  <div><strong>${htmlEscape(vote.voterName)}</strong> (${htmlEscape(vote.voterEmail)})</div>
+                  <div class="muted">Voted: ${htmlEscape(vote.optionText)}</div>
+                  <div class="muted">At: ${htmlEscape(formatDate(vote.createdAt))}</div>
+                </div>
+              `
+            )
+            .join("");
+          adminDetailsCache.set(slug, detailsHtml);
+          container.innerHTML = detailsHtml;
+        } catch (error) {
+          container.innerHTML = '<div class="status err">Could not load admin details.</div>';
+        }
+      }
+
+      async function loadPage() {
+        const response = await fetch("/api/dashboard");
+        if (response.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || "Could not load polls.", "err");
+          return;
+        }
+
+        myPollsEl.innerHTML = data.myPolls.length
+          ? data.myPolls
+              .map(
+                (poll, index) =>
+                  `<div class="card">
+                    <div><strong>${htmlEscape(poll.question)}</strong></div>
+                    <div class="meta">Total votes: ${poll.totalVotes}</div>
+                    <div><a href="/poll/${encodeURIComponent(poll.slug)}" target="_blank">Open poll</a></div>
+                    <div><a href="${htmlEscape(poll.adminUrl)}" target="_blank">Open admin page</a></div>
+                    <div style="margin-top:8px">
+                      <button class="secondary" type="button" data-admin-slug="${htmlEscape(
+                        poll.slug
+                      )}" data-admin-url="${htmlEscape(poll.adminUrl)}" data-admin-target="admin-${index}">
+                        Show vote details
+                      </button>
+                    </div>
+                    <div id="admin-${index}" style="margin-top:8px"></div>
+                  </div>`
+              )
+              .join("")
+          : "No polls yet.";
+
+        Array.from(document.querySelectorAll("button[data-admin-slug]")).forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const targetId = btn.getAttribute("data-admin-target");
+            const adminUrl = btn.getAttribute("data-admin-url");
+            const slug = btn.getAttribute("data-admin-slug");
+            const target = document.getElementById(targetId);
+            const isOpen = target.dataset.open === "1";
+            if (isOpen) {
+              target.innerHTML = "";
+              target.dataset.open = "0";
+              btn.textContent = "Show vote details";
+              return;
+            }
+            await loadAdminDetails(slug, adminUrl, targetId);
+            target.dataset.open = "1";
+            btn.textContent = "Hide vote details";
+          });
+        });
+      }
+
+      loadPage();
+    </script>
+  </body>
+</html>

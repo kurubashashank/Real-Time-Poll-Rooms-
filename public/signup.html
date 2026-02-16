@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign Up | Poll Rooms</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Create your account</h1>
+      <p>Set up your account to create polls and vote in shared rooms.</p>
+
+      <form id="signupForm" class="panel">
+        <label for="name">Name</label>
+        <input id="name" type="text" autocomplete="name" placeholder="Your full name" required />
+
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" required />
+        <p class="helper">Tip: use at least 8 characters with letters and numbers.</p>
+
+        <div class="row" style="margin-top: 16px;flex-wrap:wrap">
+          <button class="primary" id="signupBtn" type="submit">Sign up</button>
+          <a class="secondary" href="/login">Go to login</a>
+        </div>
+      </form>
+
+      <div id="status"></div>
+    </main>
+
+    <script>
+      const form = document.getElementById("signupForm");
+      const statusEl = document.getElementById("status");
+      const signupBtn = document.getElementById("signupBtn");
+
+      function setStatus(message, type) {
+        statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        signupBtn.disabled = true;
+        try {
+          const name = document.getElementById("name").value.trim();
+          const email = document.getElementById("email").value.trim();
+          const password = document.getElementById("password").value;
+
+          const response = await fetch("/api/auth/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, password })
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            setStatus(data.error || "Signup failed.", "err");
+            return;
+          }
+          window.location.href = "/";
+        } catch (error) {
+          setStatus("Network error. Please try again.", "err");
+        } finally {
+          signupBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

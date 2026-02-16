@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Browse Polls | Poll Rooms</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="hero"><span class="badge">Discover</span><h1 style="margin-top:8px">Discover polls</h1><p>Find polls quickly and jump straight into voting.</p></section>
+      <nav class="top-nav">
+        <a class="secondary" href="/">Home</a>
+        <a class="secondary" href="/create-poll">Create Poll</a>
+        <a class="secondary" href="/my-polls">My Polls</a>
+        <a class="secondary" href="/my-votes">My Votes</a>
+      </nav>
+
+      <section class="panel">
+        <label for="searchPolls">Search Polls</label>
+        <input
+          id="searchPolls"
+          type="text"
+          placeholder="Search by poll question, creator name, or email"
+          autocomplete="off"
+        />
+        <p class="helper" id="searchHint">Shortcuts: <kbd>/</kbd> to focus search, <kbd>Esc</kbd> to clear.</p>
+      </section>
+
+      <div id="allPolls" class="list">Loading...</div>
+      <div id="status"></div>
+    </main>
+
+    <script>
+      const allPollsEl = document.getElementById("allPolls");
+      const statusEl = document.getElementById("status");
+      const searchInputEl = document.getElementById("searchPolls");
+      const searchHintEl = document.getElementById("searchHint");
+      let allPollsData = [];
+
+      function setStatus(message, type) {
+        statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      function htmlEscape(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      function renderPolls(polls) {
+        const total = allPollsData.length;
+        searchHintEl.textContent = `Showing ${polls.length} of ${total} poll(s). Shortcuts: / to focus, Esc to clear.`;
+        allPollsEl.innerHTML = polls.length
+          ? polls
+              .map(
+                (poll) =>
+                  `<div class="card">
+                    <div><strong>${htmlEscape(poll.question)}</strong></div>
+                    <div class="meta">By: ${htmlEscape(poll.creator_name || "Unknown")} (${htmlEscape(
+                      poll.creator_email || "-"
+                    )})</div>
+                    <div class="meta">Total votes: ${poll.totalVotes}</div>
+                    <div><a href="/poll/${encodeURIComponent(poll.slug)}" target="_blank">Vote / View</a></div>
+                  </div>`
+              )
+              .join("")
+          : '<div class="card"><div class="meta">No polls found for your search.</div></div>';
+      }
+
+      function filterPolls() {
+        const query = searchInputEl.value.trim().toLowerCase();
+        if (!query) {
+          renderPolls(allPollsData);
+          return;
+        }
+        const filtered = allPollsData.filter((poll) =>
+          [poll.question, poll.creator_name, poll.creator_email].some((field) =>
+            String(field || "")
+              .toLowerCase()
+              .includes(query)
+          )
+        );
+        renderPolls(filtered);
+      }
+
+      async function loadPage() {
+        const response = await fetch("/api/dashboard");
+        if (response.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || "Could not load polls.", "err");
+          return;
+        }
+
+        allPollsData = Array.isArray(data.allPolls) ? data.allPolls : [];
+        renderPolls(allPollsData);
+      }
+
+      searchInputEl.addEventListener("input", filterPolls);
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "/" && document.activeElement !== searchInputEl) {
+          event.preventDefault();
+          searchInputEl.focus();
+        }
+        if (event.key === "Escape" && document.activeElement === searchInputEl) {
+          searchInputEl.value = "";
+          filterPolls();
+          searchInputEl.blur();
+        }
+      });
+      loadPage();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Poll Room | Poll Rooms</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <nav class="top-nav">
+        <a class="secondary" href="/">Home</a>
+        <a class="secondary" href="/browse-polls">Browse Polls</a>
+      </nav>
+      <h1 id="question">Loading poll...</h1>
+      <p class="muted" id="meta"></p>
+      <p class="muted" id="creator"></p>
+
+      <form id="voteForm"></form>
+      <div class="row" style="margin-top: 12px;flex-wrap:wrap">
+        <button class="primary" id="voteBtn">Submit Vote</button>
+        <a class="secondary" href="/">Home</a>
+      </div>
+
+      <h2 style="margin-top: 26px">Live Results</h2>
+      <p class="muted" id="totalVotes"></p>
+      <section id="results"></section>
+      <div id="status"></div>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const slug = location.pathname.split("/").filter(Boolean).pop();
+      const questionEl = document.getElementById("question");
+      const metaEl = document.getElementById("meta");
+      const creatorEl = document.getElementById("creator");
+      const voteForm = document.getElementById("voteForm");
+      const voteBtn = document.getElementById("voteBtn");
+      const resultsEl = document.getElementById("results");
+      const totalVotesEl = document.getElementById("totalVotes");
+      const statusEl = document.getElementById("status");
+
+      let currentPoll = null;
+
+      function setStatus(message, type) {
+        statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      if (location.protocol === "file:") {
+        questionEl.textContent = "Invalid launch mode";
+        voteBtn.disabled = true;
+        setStatus("Open poll links via http://localhost:3000 (run npm start).", "err");
+      }
+
+      function clearStatus() {
+        statusEl.innerHTML = "";
+      }
+
+      function renderPoll(data) {
+        currentPoll = data;
+        questionEl.textContent = data.poll.question;
+        metaEl.textContent = `Poll ID: ${data.poll.slug}`;
+        creatorEl.textContent = data.poll.createdBy
+          ? `Created by: ${data.poll.createdBy.name} (${data.poll.createdBy.email})`
+          : "Created by: Unknown";
+        totalVotesEl.textContent = `Total votes: ${data.totalVotes}`;
+
+        voteForm.innerHTML = "";
+        data.options.forEach((option) => {
+          const checked = data.userOptionId === option.id ? "checked" : "";
+          const disabled = data.hasVoted ? "disabled" : "";
+          const row = document.createElement("label");
+          row.className = "row";
+          row.style.marginBottom = "8px";
+          row.innerHTML = `
+            <input type="radio" name="optionId" value="${option.id}" ${checked} ${disabled} />
+            <span>${option.text}</span>
+          `;
+          voteForm.appendChild(row);
+        });
+
+        voteBtn.disabled = data.hasVoted;
+        if (data.hasVoted) {
+          setStatus("You have already voted in this poll.", "ok");
+        } else {
+          clearStatus();
+        }
+        renderResults(data.options, data.totalVotes);
+      }
+
+      function renderResults(options, totalVotes) {
+        resultsEl.innerHTML = "";
+        options.forEach((option) => {
+          const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
+          const card = document.createElement("article");
+          card.className = "result-card";
+          card.innerHTML = `
+            <div class="result-head">
+              <strong>${option.text}</strong>
+              <span>${option.votes} vote(s) - ${percent}%</span>
+            </div>
+            <div class="bar"><span style="width: ${percent}%"></span></div>
+          `;
+          resultsEl.appendChild(card);
+        });
+      }
+
+      async function loadPoll() {
+        const response = await fetch(`/api/polls/${encodeURIComponent(slug)}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Could not fetch poll.");
+        }
+        renderPoll(data);
+      }
+
+      voteBtn.addEventListener("click", async (event) => {
+        event.preventDefault();
+        clearStatus();
+        if (!currentPoll || currentPoll.hasVoted) return;
+
+        const selected = voteForm.querySelector('input[name="optionId"]:checked');
+        if (!selected) {
+          setStatus("Select an option before voting.", "err");
+          return;
+        }
+
+        const response = await fetch(`/api/polls/${encodeURIComponent(slug)}/vote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ optionId: Number(selected.value) })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          if (response.status === 401) {
+            setStatus('Login required to vote. <a href="/login">Login here</a>.', "err");
+            return;
+          }
+          setStatus(data.error || "Could not submit vote.", "err");
+          if (response.status === 409) {
+            currentPoll.hasVoted = true;
+            voteBtn.disabled = true;
+            Array.from(voteForm.querySelectorAll("input[name='optionId']")).forEach((i) => (i.disabled = true));
+          }
+          return;
+        }
+
+        currentPoll.hasVoted = true;
+        currentPoll.userOptionId = Number(selected.value);
+        voteBtn.disabled = true;
+        Array.from(voteForm.querySelectorAll("input[name='optionId']")).forEach((i) => (i.disabled = true));
+        setStatus("Vote submitted successfully.", "ok");
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey && document.activeElement?.tagName !== "BUTTON") {
+          const selected = voteForm.querySelector('input[name="optionId"]:checked');
+          if (selected && !voteBtn.disabled) {
+            event.preventDefault();
+            voteBtn.click();
+          }
+        }
+      });
+
+      const socket = io();
+      socket.emit("poll:join", slug);
+      socket.on("poll:update", (payload) => {
+        if (!currentPoll || payload.slug !== slug) return;
+        currentPoll.options = payload.options;
+        currentPoll.totalVotes = payload.totalVotes;
+        renderResults(payload.options, payload.totalVotes);
+        totalVotesEl.textContent = `Total votes: ${payload.totalVotes}`;
+      });
+
+      if (!slug) {
+        questionEl.textContent = "Invalid poll URL";
+        metaEl.textContent = "";
+        voteBtn.disabled = true;
+        setStatus("The poll link is invalid. Please check the URL.", "err");
+      } else {
+        loadPoll().catch((error) => {
+        questionEl.textContent = "Poll unavailable";
+        metaEl.textContent = "";
+        creatorEl.textContent = "";
+        voteBtn.disabled = true;
+        setStatus(error.message || "Could not load poll.", "err");
+        });
+      }
+    </script>
+  </body>
+</html>

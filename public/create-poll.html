@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Poll | Poll Rooms</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="hero"><span class="badge">Creator Studio</span><h1 style="margin-top:8px">Create a new poll</h1><p>Write a clear question, add options, and share the link instantly.</p></section>
+      <nav class="top-nav">
+        <a class="secondary" href="/">Home</a>
+        <a class="secondary" href="/my-polls">My Polls</a>
+        <a class="secondary" href="/my-votes">My Votes</a>
+        <a class="secondary" href="/browse-polls">Browse Polls</a>
+      </nav>
+
+      <form id="pollForm" class="panel">
+        <label for="question">Question</label>
+        <input id="question" name="question" type="text" maxlength="200" placeholder="Example: Which feature should we build next?" required />
+        <p class="helper">Shortcut: press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to create quickly.</p>
+
+        <label>Options</label>
+        <div id="options"></div>
+        <button class="secondary" type="button" id="addOptionBtn">+ Add option</button>
+
+        <div style="margin-top: 16px">
+          <button class="primary" id="createBtn" type="submit">Create Poll</button>
+        </div>
+      </form>
+
+      <div id="status"></div>
+    </main>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const optionsRoot = document.getElementById("options");
+      const addOptionBtn = document.getElementById("addOptionBtn");
+      const pollForm = document.getElementById("pollForm");
+      const createBtn = document.getElementById("createBtn");
+
+      function setStatus(message, type) {
+        statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      function renderOption(value = "") {
+        const row = document.createElement("div");
+        row.className = "option-row";
+        row.innerHTML = `
+          <input type="text" name="option" maxlength="80" required value="${value.replace(/"/g, "&quot;")}" />
+          <button type="button" class="danger">Remove</button>
+        `;
+        row.querySelector("button").addEventListener("click", () => {
+          if (optionsRoot.children.length <= 2) {
+            setStatus("A poll must have at least 2 options.", "err");
+            return;
+          }
+          row.remove();
+        });
+        optionsRoot.appendChild(row);
+      }
+
+      async function ensureLoggedIn() {
+        const response = await fetch("/api/auth/me");
+        if (response.status === 401) {
+          window.location.href = "/login";
+        }
+      }
+
+      pollForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        statusEl.innerHTML = "";
+        const question = document.getElementById("question").value.trim();
+        const options = Array.from(document.querySelectorAll('input[name="option"]'))
+          .map((input) => input.value.trim())
+          .filter(Boolean);
+
+        const lowered = options.map((option) => option.toLowerCase());
+        if (new Set(lowered).size !== lowered.length) {
+          setStatus("Please remove duplicate options before creating the poll.", "err");
+          return;
+        }
+
+        createBtn.disabled = true;
+        createBtn.textContent = "Creating...";
+        try {
+          const response = await fetch("/api/polls", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question, options })
+          });
+
+          if (response.status === 401) {
+            window.location.href = "/login";
+            return;
+          }
+
+          const data = await response.json();
+          if (!response.ok) {
+            setStatus(data.error || "Could not create poll.", "err");
+            return;
+          }
+
+          setStatus(
+            `Poll is ready.<br />Vote link: <a href="${data.shareUrl}" target="_blank">${data.shareUrl}</a><br />Admin link: <a href="${data.adminUrl}" target="_blank">${data.adminUrl}</a>`,
+            "ok"
+          );
+
+          pollForm.reset();
+          optionsRoot.innerHTML = "";
+          renderOption();
+          renderOption();
+        } catch (error) {
+          setStatus("Network error while creating poll.", "err");
+        } finally {
+          createBtn.disabled = false;
+          createBtn.textContent = "Create Poll";
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.ctrlKey && event.key === "Enter") {
+          event.preventDefault();
+          pollForm.requestSubmit();
+        }
+      });
+
+      addOptionBtn.addEventListener("click", () => renderOption());
+      renderOption();
+      renderOption();
+      ensureLoggedIn();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Votes | Poll Rooms</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="hero"><span class="badge">Activity</span><h1 style="margin-top:8px">My votes</h1><p>See where you voted and what option you selected.</p></section>
+      <nav class="top-nav">
+        <a class="secondary" href="/">Home</a>
+        <a class="secondary" href="/create-poll">Create Poll</a>
+        <a class="secondary" href="/my-polls">My Polls</a>
+        <a class="secondary" href="/browse-polls">Browse Polls</a>
+      </nav>
+
+      <div id="myVotes" class="list">Loading...</div>
+      <div id="status"></div>
+    </main>
+
+    <script>
+      const myVotesEl = document.getElementById("myVotes");
+      const statusEl = document.getElementById("status");
+
+      function setStatus(message, type) {
+        statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      function htmlEscape(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      function formatDate(ts) {
+        const d = new Date(Number(ts));
+        return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+      }
+
+      async function loadPage() {
+        const response = await fetch("/api/dashboard");
+        if (response.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || "Could not load votes.", "err");
+          return;
+        }
+
+        myVotesEl.innerHTML = data.myVotes.length
+          ? data.myVotes
+              .map(
+                (vote) =>
+                  `<div class="card">
+                    <div><strong>${htmlEscape(vote.question)}</strong></div>
+                    <div class="meta">You voted: ${htmlEscape(vote.selected_option)}</div>
+                    <div class="meta">When: ${htmlEscape(formatDate(vote.created_at))}</div>
+                    <div><a href="/poll/${encodeURIComponent(vote.slug)}" target="_blank">Open poll</a></div>
+                  </div>`
+              )
+              .join("")
+          : "No votes yet.";
+      }
+
+      loadPage();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Home | Poll Rooms</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap">
+        <section>
+          <h1 id="welcome">Dashboard</h1>
+          <p id="me" class="muted"></p>
+        </section>
+        <button class="secondary" id="logoutBtn">Logout</button>
+      </div>
+
+      <section class="hero" style="margin-top:14px">
+        <span class="badge">Workspace</span>
+        <h2 style="margin-top:10px">Manage your polls in one place</h2>
+        <p>Create polls, track responses live, and review voter details from your admin links.</p>
+        <div class="stats">
+          <div class="stat">
+            <b>Live</b>
+            Real-time result updates
+          </div>
+          <div class="stat">
+            <b>Fair</b>
+            One-vote and anti-spam checks
+          </div>
+          <div class="stat">
+            <b>Secure</b>
+            User accounts with admin views
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Go To</h2>
+        <div class="list">
+          <a class="secondary" href="/create-poll">Create Poll</a>
+          <a class="secondary" href="/my-polls">My Polls</a>
+          <a class="secondary" href="/my-votes">My Votes</a>
+          <a class="secondary" href="/browse-polls">Browse Polls</a>
+        </div>
+      </section>
+
+      <div id="status"></div>
+    </main>
+
+    <script>
+      const welcomeEl = document.getElementById("welcome");
+      const meEl = document.getElementById("me");
+      const statusEl = document.getElementById("status");
+      const logoutBtn = document.getElementById("logoutBtn");
+
+      function setStatus(message, type) {
+        statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      async function loadMe() {
+        const response = await fetch("/api/auth/me");
+        if (response.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+        const data = await response.json();
+        if (!response.ok) {
+          setStatus(data.error || "Could not load account.", "err");
+          return;
+        }
+        welcomeEl.textContent = `Hi ${data.user.name}`;
+        meEl.textContent = data.user.email;
+      }
+
+      logoutBtn.addEventListener("click", async () => {
+        if (!confirm("Do you want to logout now?")) return;
+        await fetch("/api/auth/logout", { method: "POST" });
+        window.location.href = "/login";
+      });
+
+      loadMe();
+    </script>
+  </body>
+</html>

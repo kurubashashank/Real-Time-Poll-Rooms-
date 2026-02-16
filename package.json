@@ -1,0 +1,19 @@
+{
+  "name": "applyo-realtime-poll-rooms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack assignment: real-time poll rooms",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "dev:nolimit": "set DISABLE_RATE_LIMIT=1&& node server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
+    "nanoid": "^5.1.5",
+    "socket.io": "^4.8.1",
+    "sqlite3": "^5.1.7"
+  }
+}

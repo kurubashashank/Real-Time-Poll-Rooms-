@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Poll View | Poll Rooms</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <nav class="top-nav">
+        <a class="secondary" href="/">Home</a>
+        <a class="secondary" href="/my-polls">My Polls</a>
+      </nav>
+      <h1 id="title">Poll admin view</h1>
+      <p class="muted" id="meta">Loading...</p>
+      <p class="muted" id="creator"></p>
+      <div id="status"></div>
+
+      <h2 style="margin-top: 20px">Vote details</h2>
+      <div id="votesContainer" class="muted">No votes yet.</div>
+    </main>
+
+    <script>
+      const slug = location.pathname.split("/").filter(Boolean).pop();
+      const token = new URLSearchParams(location.search).get("token") || "";
+      const titleEl = document.getElementById("title");
+      const metaEl = document.getElementById("meta");
+      const creatorEl = document.getElementById("creator");
+      const statusEl = document.getElementById("status");
+      const votesContainer = document.getElementById("votesContainer");
+
+      function setStatus(message, type) {
+        statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      function formatDate(ts) {
+        const date = new Date(Number(ts));
+        if (Number.isNaN(date.getTime())) return "-";
+        return date.toLocaleString();
+      }
+
+      function renderVotes(votes) {
+        if (!votes.length) {
+          votesContainer.textContent = "No votes yet.";
+          return;
+        }
+
+        const table = document.createElement("table");
+        table.style.width = "100%";
+        table.style.borderCollapse = "collapse";
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th style="text-align:left;border-bottom:1px solid #d6e2e8;padding:8px">Vote ID</th>
+              <th style="text-align:left;border-bottom:1px solid #d6e2e8;padding:8px">Option</th>
+              <th style="text-align:left;border-bottom:1px solid #d6e2e8;padding:8px">Voter Name</th>
+              <th style="text-align:left;border-bottom:1px solid #d6e2e8;padding:8px">Voter Email</th>
+              <th style="text-align:left;border-bottom:1px solid #d6e2e8;padding:8px">Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${votes
+              .map(
+                (vote) => `
+              <tr>
+                <td style="border-bottom:1px solid #edf3f6;padding:8px">${vote.id}</td>
+                <td style="border-bottom:1px solid #edf3f6;padding:8px">${vote.optionText}</td>
+                <td style="border-bottom:1px solid #edf3f6;padding:8px">${vote.voterName || "-"}</td>
+                <td style="border-bottom:1px solid #edf3f6;padding:8px">${vote.voterEmail || "-"}</td>
+                <td style="border-bottom:1px solid #edf3f6;padding:8px">${formatDate(vote.createdAt)}</td>
+              </tr>
+            `
+              )
+              .join("")}
+          </tbody>
+        `;
+
+        votesContainer.innerHTML = "";
+        votesContainer.appendChild(table);
+      }
+
+      async function loadAdminData() {
+        if (!slug || !token) {
+          setStatus("Missing or invalid admin URL.", "err");
+          metaEl.textContent = "";
+          return;
+        }
+        try {
+          const response = await fetch(
+            `/api/admin/polls/${encodeURIComponent(slug)}?token=${encodeURIComponent(token)}`
+          );
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || "Could not load admin data.");
+          }
+          titleEl.textContent = `Admin view: ${data.poll.question}`;
+          metaEl.textContent = `Poll ID: ${data.poll.slug}`;
+          creatorEl.textContent = `Created by: ${data.poll.creatorName || "Unknown"} (${data.poll.creatorEmail || "-"})`;
+          renderVotes(data.votes);
+        } catch (error) {
+          metaEl.textContent = "";
+          creatorEl.textContent = "";
+          setStatus(error.message || "Could not load admin data.", "err");
+        }
+      }
+
+      loadAdminData();
+    </script>
+  </body>
+</html>
