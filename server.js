@@ -8,7 +8,11 @@ const http = require("http");
 
 const PORT = process.env.PORT || 3000;
 const IS_VERCEL = Boolean(process.env.VERCEL);
-const DB_PATH = IS_VERCEL ? ":memory:" : path.join(__dirname, "data", "applyo.db");
+const DB_PATH = IS_VERCEL
+  ? process.platform === "win32"
+    ? ":memory:"
+    : "/tmp/applyo.db"
+  : path.join(__dirname, "data", "applyo.db");
 const RATE_LIMIT_DISABLED = process.env.DISABLE_RATE_LIMIT === "1";
 
 const SLUG_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
